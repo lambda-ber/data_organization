@@ -39,19 +39,21 @@ Query experiments across metadata fields.
 - `technique` - string, must match controlled_vocabularies.techniques from the LAMBDA contract
 - `facility` - string, must match controlled_vocabularies.facilities from the LAMBDA contract
 - `instrument` - string, case-insensitive substring match (free text)
-- `date_start` - ISO 8601 datetime (inclusive). Must use YYYY-MM-DDTHH:MM:SSZ format (UTC, trailing Z, no timezone offsets) matching LAMBDA contract
-- `date_end` - ISO 8601 datetime (inclusive). Must use YYYY-MM-DDTHH:MM:SSZ format (UTC, trailing Z, no timezone offsets) matching LAMBDA contract
+- `isPublic` - boolean, filter by public accessibility (e.g., `true` or `false`)
+- `creationDate_start` - ISO 8601 datetime (inclusive). Must use YYYY-MM-DDTHH:MM:SSZ format (UTC, trailing Z, no timezone offsets) matching LAMBDA contract
+- `creationDate_end` - ISO 8601 datetime (inclusive). Must use YYYY-MM-DDTHH:MM:SSZ format (UTC, trailing Z, no timezone offsets) matching LAMBDA contract
 
 **Matching Rules:**
 All provided filters are combined with logical AND.
 - `protein_name`: case-insensitive substring match
 - `facility`, `technique`: exact match against controlled vocabulary
 - `instrument`: case-insensitive substring match (free text)
+- `isPublic`: exact boolean match (true/false)
 - `seguid`: Request `seguid=seg1,seg2` means "experiment has all of these SEGUIDs"
-- `date_start`, `date_end`: 
-  - If only `date_start` is provided: return experiments with `experiment_info.date >= date_start`
-  - If only `date_end` is provided: return experiments with `experiment_info.date <= date_end`
-  - If both are provided: return experiments with `date_start <= experiment_info.date <= date_end`
+- `creationDate_start`, `creationDate_end`: 
+  - If only `creationDate_start` is provided: return experiments with `experiment_info.date >= creationDate_start`
+  - If only `creationDate_end` is provided: return experiments with `experiment_info.date <= creationDate_end`
+  - If both are provided: return experiments with `creationDate_start <= experiment_info.date <= creationDate_end`
 
 **Response: 200 OK**
 ```json
@@ -59,14 +61,16 @@ All provided filters are combined with logical AND.
   "results": [
     {
       "experiment_id": "550e8400-e29b-41d4-a716-446655440000",
-      "contract_version": "0.1.0",
+      "pid": "10.15151/LBNL-ALS-123456789",
       "facility": "ALS",
       "facility_endpoint": "https://als-lambda.lbl.gov/api/v1",
+      "isPublic": true,
       "seguid": ["abc123def456", "789ghi012jkl"],
       "protein_name": "lysozyme-nanobody complex",
       "technique": "cryo-ET",
       "instrument": "Titan Krios",
-      "date": "2025-03-15T14:30:00Z",
+      "creationDate": "2025-03-15T14:30:00Z",
+      "size": 12458496,
       "PI": {
         "name": "Jane Smith",
         "institute": "UC Berkeley",
@@ -87,11 +91,13 @@ When no experiments match, the API MUST return `results: []` and `count: 0`.
 
 **Field Notes:**
 - `experiment_id`: UUID from experiment_info.experiment_id in the LAMBDA Data Organization Contract
-- `contract_version`: Version string from experiment_info.contract_version (allows client to verify compatibility)
+- `pid`: (Optional) Persistent identifier (DOI, Handle, or other stable identifier). Enables integration with EOSC and OpenAIRE. Examples: `10.15151/LBNL-ALS-123456789`, `20.500.12345/dataset-001`
 - `facility`: Must match controlled_vocabularies.facilities from the LAMBDA contract
-- `technique`: Must match controlled_vocabularies.techniques from the LAMBDA contract
+- `isPublic`: Boolean indicating whether data is publicly accessible or under embargo
 - `seguid`: Array of SEGUID strings. Omit field entirely if no SEGUID exists for this experiment. Never emit `[null]`.
-- `date`: Timestamp in YYYY-MM-DDTHH:MM:SSZ format (UTC, trailing Z, no timezone offsets) matching LAMBDA contract
+- `technique`: Must match controlled_vocabularies.techniques from the LAMBDA contract
+- `creationDate`: Timestamp of data collection in YYYY-MM-DDTHH:MM:SSZ format (UTC, trailing Z, no timezone offsets) matching LAMBDA contract
+- `size`: (Optional) Total dataset size in bytes. Helps clients estimate transfer time and storage requirements.
 - `facility_endpoint`: Full base URL of this facility's API (enables routing for multi-facility queries)
 - Other metadata fields should match `experiment_info.json` from LAMBDA contract where applicable
 
@@ -117,7 +123,6 @@ Check facility API status. In version 0.1.x, `/health` MUST be publicly accessib
   "status": "healthy",
   "facility": "ALS",
   "api_version": "0.1.0",
-  "contract_version": "0.1.0",
   "seguid_algorithm": "IUPAC_SEGUID_v1"
 }
 ```
@@ -161,8 +166,38 @@ Error responses MUST be returned with HTTP status code and JSON body using the s
 - Order should be documented (e.g., alphabetical, or chain order)
 - If no SEGUID exists for an experiment, omit the `seguid` field entirely from responses (never emit `[null]`)
 
+**Technique Vocabulary Alignment:**
+LAMBDA techniques align with the PaNOSC/PaNET ontology used by European photon and neutron facilities to enable cross-region interoperability (https://www.panosc.eu/):
+- `cryo-ET` → PaNET: `tomography/cryo-electron-tomography`
+- `cryo-EM` → PaNET: `single-particle-analysis/cryo-electron-microscopy`
+- `SAXS` → PaNET: `small-angle-scattering/x-ray`
+- `SANS` → PaNET: `small-angle-scattering/neutron`
+- `XRD` → PaNET: `diffraction/x-ray-powder-diffraction`
+- `RX` → PaNET: `diffraction/single-crystal-x-ray-diffraction`
+- `SFX` → PaNET: `diffraction/serial-femtosecond-crystallography`
+
+This mapping enables future federated searches across DOE and European facilities. Full mapping documentation: [TBD]
+
+**PaNOSC Alignment:**
+LAMBDA follows architectural patterns proven by the European PaNOSC project (2018-2022):
+- Search-only API (transfer is separate concern)
+- Federated architecture (no central repository)
+- Facility autonomy (each implements independently)
+- Both projects validate that interface-based federation works in production
+
+Key compatibility features:
+- `pid` field supports DOI/Handle identifiers used by EOSC
+- `isPublic` flag aligns with embargo workflows
+- `creationDate` naming follows PaNOSC convention
+- ORCID identifiers for researcher attribution
+
+LAMBDA maintains simpler design choices optimized for DOE workflows (unified `/search` endpoint, simple query parameters) while enabling future DOE ↔ European interoperability.
+
 ---
 
 **Status:** Draft v0.1.0 (Search/Discovery API only)  
-**Last Updated:** 2025-12-05  
+**Last Updated:** 2025-12-08  
+**Related:** 
+- LAMBDA Data Organization Contract v0.1.0
+- PaNOSC Search API (European photon/neutron facilities https://www.panosc.eu/)
 **Note:** Data transfer, mapping, and access specifications are separate documents (to be developed)
