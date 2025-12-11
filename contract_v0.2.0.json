@@ -1,0 +1,1693 @@
+{
+  "contract_version": "0.2.0",
+  "contract_name": "LAMBDA Data Organization Contract",
+  "last_updated": "2025-12-11",
+  "description": "Client-side data organization contract for LAMBDA federated bioimaging data architecture. This specification defines the required structure and metadata that facilities must provide when delivering data to LAMBDA consumers.",
+  
+  "directory_structure": {
+    "root": "<experiment_directory>",
+    "root_naming": {
+      "description": "The top-level experiment directory name follows a structured convention for consistency, discoverability, and uniqueness while remaining human-readable.",
+      "required_format": "facility_instrument_YYYYMMDD_uuidlast_samplename",
+      "format_specification": {
+        "facility": {
+          "description": "Facility short code from controlled vocabulary (lowercase)",
+          "source": "Lowercase version of experiment_info.facility.name",
+          "examples": ["als", "slac", "lcls", "nslsii"],
+          "pattern": "^[a-z]+$",
+          "note": "Use 'other' for facilities not in controlled vocabulary"
+        },
+        "instrument": {
+          "description": "Instrument/beamline identifier (lowercase, underscores for spaces)",
+          "source": "Sanitized version of experiment_info.facility.instrument",
+          "examples": ["bl8_3_1", "titan_krios", "cxi"],
+          "pattern": "^[a-z0-9_]+$",
+          "sanitization": "Convert to lowercase, replace spaces/hyphens/dots with underscores, remove special characters",
+          "max_length": 20
+        },
+        "date": {
+          "description": "Data collection date in YYYYMMDD format",
+          "source": "Date portion of experiment_info.date",
+          "examples": ["20250315", "20241201"],
+          "pattern": "^[0-9]{8}$"
+        },
+        "uuidlast": {
+          "description": "Last 12 hexadecimal characters of experiment_info.experiment_id (last UUID block)",
+          "source": "Final segment of experiment_info.experiment_id UUID",
+          "examples": ["446655440000", "1a2b3c4d5e6f"],
+          "pattern": "^[0-9a-f]{12}$",
+          "note": "Lowercase hexadecimal. This provides uniqueness while keeping directory name manageable length."
+        },
+        "samplename": {
+          "description": "Sample identifier (lowercase, underscores for spaces)",
+          "source": "Sanitized version of experiment_info.sample_name",
+          "examples": ["lysozyme", "sars_cov_2_spike", "apoferritin"],
+          "pattern": "^[a-z0-9_]+$",
+          "sanitization": "Convert to lowercase, replace spaces/hyphens with underscores, remove special characters",
+          "max_length": 50
+        }
+      },
+      "complete_examples": [
+        {
+          "directory_name": "als_bl8_3_1_20250315_446655440000_lysozyme",
+          "experiment_info_source": {
+            "facility": {
+              "name": "ALS",
+              "instrument": "BL8.3.1"
+            },
+            "date": "2025-03-15T14:30:00Z",
+            "experiment_id": "550e8400-e29b-41d4-a716-446655440000",
+            "sample_name": "lysozyme"
+          }
+        },
+        {
+          "directory_name": "lcls_cxi_20241201_7890abcdef12_sars_cov_2_spike",
+          "experiment_info_source": {
+            "facility": {
+              "name": "LCLS",
+              "instrument": "CXI"
+            },
+            "date": "2024-12-01T10:00:00Z",
+            "experiment_id": "abc12345-6789-abcd-ef01-7890abcdef12",
+            "sample_name": "SARS-CoV-2-spike"
+          }
+        },
+        {
+          "directory_name": "slac_titan_krios_20250120_1234567890ab_apoferritin",
+          "experiment_info_source": {
+            "facility": {
+              "name": "SLAC",
+              "instrument": "Titan Krios"
+            },
+            "date": "2025-01-20T08:15:00Z",
+            "experiment_id": "fedcba98-7654-3210-fedc-1234567890ab",
+            "sample_name": "apoferritin"
+          }
+        }
+      ],
+      "validation_rules": {
+        "pattern_enforcement": "Validators MUST verify directory name matches the required format pattern",
+        "full_pattern": "^[a-z]+_[a-z0-9_]+_[0-9]{8}_[0-9a-f]{12}_[a-z0-9_]+$",
+        "consistency_check": "Validators MUST verify: (1) facility code matches experiment_info.facility.name (case-insensitive), (2) date matches experiment_info.date (date portion only), (3) uuidlast matches last 12 chars of experiment_info.experiment_id (case-insensitive), (4) instrument and samplename are reasonable sanitizations of their source fields (experiment_info.facility.instrument and experiment_info.sample_name)",
+        "length_limits": "Total directory name should not exceed 200 characters. Individual components: instrument ≤20 chars, samplename ≤50 chars.",
+        "character_restrictions": "Directory name must contain only: lowercase letters, digits, underscores. No spaces, hyphens, dots, or special characters."
+      },
+      "rationale": {
+        "structured_format": "Enables programmatic parsing and validation while maintaining human readability",
+        "facility_prefix": "Allows sorting and grouping experiments by facility in shared storage",
+        "date_inclusion": "Enables temporal sorting and quick visual identification of experiment age",
+        "uuid_fragment": "Provides guaranteed uniqueness without making directory name unreadable. 12 hex digits = 2^48 possible values, essentially no collision risk within a facility",
+        "sample_name": "Primary human-readable identifier for quick recognition"
+      },
+      "enforcement": "Structured naming is REQUIRED for all datasets conforming to contract_version 0.2.0 and later. No legacy naming formats are supported."
+    },
+    "required_root_structure": [
+      "raw_data/",
+      "products/",
+      "raw_metadata/"
+    ],
+    "required_info_files": [
+      "experiment_info.json",
+      "raw_data/raw_data_info.json",
+      "products/product_info.json",
+      "raw_metadata/raw_metadata_info.json"
+    ],
+    "strict_root": true,
+    "description": "Root must contain EXACTLY the three directories and one top-level JSON file listed above. No additional files or directories permitted. The root directory name is human-readable and chosen by the facility; the UUID is stored in experiment_info.json."
+  },
+
+  "schemas": {
+    "experiment_info": {
+      "type": "object",
+      "description": "Top-level experiment metadata",
+      "additionalProperties": false,
+      "required": [
+        "contract_version",
+        "experiment_id",
+        "facility_experiment_id",
+        "facility",
+        "technique",
+        "date",
+        "team",
+        "sample_name"
+      ],
+      "properties": {
+        "contract_version": {
+          "type": "string",
+          "description": "Version of LAMBDA contract this dataset conforms to",
+          "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$",
+          "examples": ["0.2.0"]
+        },
+        "experiment_id": {
+          "type": "string",
+          "description": "Globally unique identifier in UUID format (8-4-4-4-12 hexadecimal)",
+          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+          "examples": ["550e8400-e29b-41d4-a716-446655440000"]
+        },
+        "facility_experiment_id": {
+          "type": "string",
+          "description": "Facility's internal experiment identifier. Used for cross-referencing with facility systems and databases.",
+          "minLength": 1,
+          "maxLength": 200,
+          "examples": ["ALS-2025-001234", "BL8.3.1_run_042", "proposal_12345_exp_7"]
+        },
+        "experiment_name": {
+          "type": "string",
+          "description": "Human-readable shorthand name for the experiment. Single sentence or short descriptive name. RECOMMENDED for improved discoverability and human usability. This should be the primary human-facing identifier, with experiment_id serving as the machine-readable unique identifier for federation.",
+          "minLength": 1,
+          "maxLength": 200,
+          "examples": [
+            "Lysozyme cryo-EM structure determination",
+            "SARS-CoV-2 spike protein tilt series",
+            "Apoferritin serial crystallography March 2025",
+            "Photosystem II room temperature structures"
+          ],
+          "usage": "Prefer this field over experiment_id when displaying experiment information to users, generating reports, or creating human-readable outputs."
+        },
+        "facility": {
+          "type": "object",
+          "description": "Facility information including facility name and instrument. This structure enforces that instruments are always associated with a specific facility.",
+          "additionalProperties": false,
+          "required": ["name", "instrument"],
+          "properties": {
+            "name": {
+              "type": "string",
+              "description": "DOE facility name",
+              "enum": ["ALS", "NSLSII", "APS", "SNS", "EMSL", "SLAC", "LCLS", "other"]
+            },
+            "instrument": {
+              "type": "string",
+              "description": "Specific beamline, microscope, or instrument identifier located at this facility. Should use short acronym compatible with PDB listings where applicable.",
+              "examples": ["BL8.3.1", "Titan Krios", "CXI"],
+              "note": "TODO: Harmonize with PDB instrument naming conventions"
+            }
+          }
+        },
+        "technique": {
+          "type": "string",
+          "description": "Primary experimental technique. Abbreviations: RX=rotation crystallography, SX=serial crystallography, SFX=serial femtosecond crystallography, EMD=electron microdiffraction, SEDX=serial electron diffraction, SAXS=small-angle X-ray scattering, WAXS=wide-angle X-ray scattering, SANS=small-angle neutron scattering, WANS=wide-angle neutron scattering, XRD=X-ray diffraction",
+          "enum": ["cryo-ET", "cryo-EM", "RX", "SX", "SFX", "SAXS", "WAXS", "SANS", "WANS", "XRD", "EMD", "SEDX", "other"]
+        },
+        "date": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Data collection date/time in ISO 8601 format with UTC timezone (must end with Z). Represents a single point in time: typically the start of data collection or a representative timestamp for the experiment session. For experiments spanning multiple days, use the start time or primary collection date. Supports seconds precision (required) and optional fractional seconds (milliseconds, microseconds).",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]{1,6})?Z$",
+          "examples": ["2025-03-15T14:30:00Z", "2025-03-15T14:30:00.123Z", "2025-03-15T14:30:00.123456Z"],
+          "note": "Single timestamp represents the experiment session. Time ranges are not supported in contract_version 0.2.x. If precise start/end times are needed, consider using raw_metadata for detailed logs. Fractional seconds are optional but recommended for high-precision timing requirements."
+        },
+        "team": {
+          "type": "object",
+          "description": "Research team information",
+          "additionalProperties": false,
+          "required": ["PI"],
+          "properties": {
+            "PI": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["name", "institute", "orcid"],
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "description": "Principal investigator name"
+                },
+                "institute": {
+                  "type": "string",
+                  "description": "Principal investigator institution"
+                },
+                "orcid": {
+                  "type": "string",
+                  "description": "ORCID identifier for principal investigator",
+                  "pattern": "^[0-9]{4}-[0-9]{4}-[0-9]{4}-[0-9]{3}[0-9X]$",
+                  "examples": ["0000-0002-1825-0097"]
+                }
+              }
+            },
+            "team_members": {
+              "type": "array",
+              "description": "Additional team members involved in data collection",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["name", "institute"],
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "description": "Team member name"
+                  },
+                  "institute": {
+                    "type": "string",
+                    "description": "Team member institution"
+                  },
+                  "orcid": {
+                    "type": "string",
+                    "description": "ORCID identifier (optional, but if provided must be valid)",
+                    "pattern": "^[0-9]{4}-[0-9]{4}-[0-9]{4}-[0-9]{3}[0-9X]$",
+                    "examples": ["0000-0002-1825-0097"]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "sample_name": {
+          "type": "string",
+          "description": "Short sample identifier",
+          "examples": ["lysozyme", "SARS-CoV-2-spike", "apoferritin"]
+        },
+        "sample_composition": {
+          "type": "string",
+          "description": "High-level sample composition",
+          "examples": ["protein in vitreous ice", "protein crystal", "DNA-protein complex"]
+        },
+        "content": {
+          "type": "object",
+          "description": "Sample content information including molecular components and other content-related metadata",
+          "additionalProperties": false,
+          "properties": {
+            "components": {
+              "type": "object",
+              "description": "Molecular components organized by type. Similar to PDB organization where different molecule types are separated into distinct sections.",
+              "additionalProperties": false,
+              "properties": {
+                "protein": {
+                  "type": "array",
+                  "description": "Array of protein sequences",
+              "items": {
+                "type": "object",
+                "required": ["sequence"],
+                "additionalProperties": false,
+                "properties": {
+                  "sequence": {
+                    "type": "string",
+                    "description": "Protein sequence in FASTA format or single-line canonical amino acid code"
+                  },
+                  "sequid2": {
+                    "type": "string",
+                    "description": "sequid2 (Sequence ID 2) identifier for this protein sequence. sequid2 is an optional identifier assigned by sequence databases or annotation systems to track protein/DNA/RNA sequences. Format is database-specific (typically alphanumeric with underscores/hyphens). Examples: UniProt accessions, GenBank IDs, or custom facility identifiers. If provided, should be a stable identifier that can be used to retrieve the sequence from its source database.",
+                    "examples": ["SEQID2_12345", "P00698", "NP_000509.1"],
+                    "note": "sequid2 is optional. Facilities should provide it when sequences are derived from or can be referenced in external sequence databases."
+                  }
+                }
+              },
+              "examples": [
+                [
+                  {
+                    "sequence": "MKTAYIAKQRQISFVKSHFSRQLEERLGLIEVQAPILSRVGDGTQDNLSGAEKAVQVKVKALPDAQFEVVHSLAKWKRQTLGQHDFSAGEGLYTHMKALRPDEDRLSPLHSVYVDQWDWERVMGDGERQFSTLKSTVEAIWAGIKATEAAVSEEFGLAPFLPDQIHFVHSQELLSRYPDLDAKGRERAIAKDLGAVFLVGIGGKLSDGHRHDVRAPDYDDWSTPSELGHAGLNGDILVWNPVLEDAFELSSMGIRVDADTLKHQLALTGDEDRLELEWHQALLRGEMPQTIGGGIGQSRLTMLLLQLPHIGQVQAGVWPAAVRESVPSLL",
+                    "sequid2": "SEQID2_12345"
+                  }
+                ]
+              ]
+            },
+                "DNA": {
+                  "type": "array",
+                  "description": "Array of DNA sequences",
+              "items": {
+                "type": "object",
+                "required": ["sequence"],
+                "additionalProperties": false,
+                "properties": {
+                  "sequence": {
+                    "type": "string",
+                    "description": "DNA sequence in FASTA format or single-line canonical nucleotide code"
+                  },
+                  "sequid2": {
+                    "type": "string",
+                    "description": "sequid2 identifier for this DNA sequence",
+                    "examples": ["SEQID2_67890"]
+                  }
+                }
+              }
+            },
+                "RNA": {
+                  "type": "array",
+                  "description": "Array of RNA sequences",
+              "items": {
+                "type": "object",
+                "required": ["sequence"],
+                "additionalProperties": false,
+                "properties": {
+                  "sequence": {
+                    "type": "string",
+                    "description": "RNA sequence in FASTA format or single-line canonical nucleotide code"
+                  },
+                  "sequid2": {
+                    "type": "string",
+                    "description": "sequid2 identifier for this RNA sequence"
+                  }
+                }
+              }
+            },
+                "ligands": {
+                  "type": "array",
+                  "description": "Array of ligand structures",
+              "items": {
+                "type": "object",
+                "required": ["stereo_smiles"],
+                "additionalProperties": false,
+                "properties": {
+                  "stereo_smiles": {
+                    "type": "string",
+                    "description": "Stereochemical SMILES string for ligand structure. Charges are encoded within the SMILES string using bracket notation (e.g., [Na+], [Cl-], [NH3+], [COO-]). For charged ligands, the charge is part of the SMILES representation.",
+                    "examples": ["C[C@H](N)C(=O)O", "[H][C@]1(CC(C(=O)O)=O)NC(=O)C2=C1C=CC=C2", "C1=CC=[NH+]C=C1", "[Na+]"]
+                  }
+                }
+              },
+              "examples": [
+                [
+                  {
+                    "stereo_smiles": "C[C@H](N)C(=O)O"
+                  },
+                  {
+                    "stereo_smiles": "[Na+]"
+                  }
+                ]
+              ]
+            },
+                "metals": {
+                  "type": "array",
+                  "description": "Array of metal ions or metal-containing compounds",
+              "items": {
+                "type": "object",
+                "required": ["stereo_smiles"],
+                "additionalProperties": false,
+                "properties": {
+                  "stereo_smiles": {
+                    "type": "string",
+                    "description": "Stereochemical SMILES string for metal or metal-containing compound. Charges are encoded within the SMILES string using bracket notation (e.g., [Zn+2], [Fe+3], [Cu+2], [Mg+2]). For metal ions, the charge is part of the SMILES representation.",
+                    "examples": ["[Zn+2]", "[Fe+3]", "[Cu+2]", "[Mg+2]", "[Ca+2]"]
+                  }
+                }
+              },
+              "examples": [
+                [
+                  {
+                    "stereo_smiles": "[Zn+2]"
+                  },
+                  {
+                    "stereo_smiles": "[Fe+3]"
+                  }
+                ]
+              ]
+            },
+                "other": {
+                  "type": "array",
+                  "description": "Array of other molecular components not fitting the above categories",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "sequence": {
+                    "type": "string",
+                    "description": "Sequence or structure representation for other components"
+                  },
+                  "stereo_smiles": {
+                    "type": "string",
+                    "description": "Alternative: Stereochemical SMILES string if applicable"
+                  },
+                  "sequid2": {
+                    "type": "string",
+                    "description": "sequid2 identifier for this component"
+                  }
+                },
+                "anyOf": [
+                  {"required": ["sequence"]},
+                  {"required": ["stereo_smiles"]}
+                ]
+              }
+            }
+              }
+            }
+          }
+        },
+        "sample_description": {
+          "type": "string",
+          "description": "Detailed free-text sample description"
+        },
+        "related_experiments": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "description": "UUID of a related experiment (must match experiment_id format). Must NOT be the same as the current experiment_id.",
+            "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+            "examples": ["550e8400-e29b-41d4-a716-446655440000"]
+          },
+          "description": "Array of related experiment_ids for multi-facility campaigns. Each entry must be a valid UUID matching the experiment_id format. Must not contain the current experiment_id (self-reference not permitted)."
+        },
+        "notes": {
+          "type": "string",
+          "description": "Additional free-text notes"
+        }
+      }
+    },
+
+    "raw_data_info": {
+      "type": "object",
+      "description": "Manifest of raw experimental data units",
+      "additionalProperties": false,
+      "required": ["units"],
+      "properties": {
+        "units": {
+          "type": "array",
+          "minItems": 1,
+          "description": "Array of data units, where each unit represents data from a single biological sample",
+          "items": {
+            "type": "object",
+            "required": ["id", "path", "description"],
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "type": "string",
+                "description": "Unique identifier for this data unit",
+                "pattern": "^unit_[0-9]+$",
+                "examples": ["unit_1", "unit_2"]
+              },
+              "path": {
+                "type": "string",
+                "description": "Relative path to unit directory from raw_data/",
+                "pattern": "^\\./unit_[0-9]+/$",
+                "examples": ["./unit_1/", "./unit_2/"]
+              },
+              "description": {
+                "type": "string",
+                "description": "Human-readable description of what this data unit represents",
+                "examples": ["Tilt series from grid position A3", "Diffraction images from crystal 1"]
+              },
+              "name": {
+                "type": "string",
+                "description": "Optional human-readable identifier for this unit. Can be used as a more memorable alternative to unit_N numeric ID. Should be concise and descriptive. Examples: crystal names, grid positions, sample identifiers, or other facility-specific meaningful labels.",
+                "minLength": 1,
+                "maxLength": 100,
+                "pattern": "^[A-Za-z0-9._\\-]+$",
+                "examples": ["crystal_1_grid_a3", "sample_lysozyme_run1", "tilt_series_A3", "xtal-001"]
+              },
+              "status": {
+                "type": "string",
+                "description": "Operational status of this data unit. Indicates whether the unit is valid and should be used for analysis.",
+                "enum": ["active", "deleted", "deprecated", "invalid"],
+                "default": "active",
+                "definitions": {
+                  "active": "Unit is valid and available for use (default if field omitted)",
+                  "deleted": "Unit has been removed or is no longer available. Directory may or may not exist.",
+                  "deprecated": "Unit is available but should not be used (e.g., superseded by better data)",
+                  "invalid": "Unit data is corrupted, incomplete, or otherwise unusable"
+                },
+                "examples": ["active", "deleted", "deprecated"]
+              },
+              "unit_uuid": {
+                "type": "string",
+                "description": "Optional globally unique identifier for this data unit in UUID format (8-4-4-4-12 hexadecimal). Useful for cross-referencing and federation.",
+                "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+                "examples": ["7c9e6679-7425-40de-944b-e07fc1f90ae7"]
+              },
+              "external_data_reference": {
+                "type": "object",
+                "description": "Optional reference to raw data stored in another LAMBDA-compliant experiment. When present, indicates this unit's data physically resides elsewhere and is referenced rather than duplicated. The local unit directory may be empty, contain a symlink, or contain a reference descriptor file.",
+                "required": ["source_experiment_id", "source_unit_id"],
+                "additionalProperties": false,
+                "properties": {
+                  "source_experiment_id": {
+                    "type": "string",
+                    "description": "UUID of the experiment containing the source raw data. Should match an entry in experiment_info.related_experiments.",
+                    "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+                    "examples": ["550e8400-e29b-41d4-a716-446655440000"]
+                  },
+                  "source_unit_id": {
+                    "type": "string",
+                    "description": "Unit ID within the source experiment (must match unit_N pattern)",
+                    "pattern": "^unit_[0-9]+$",
+                    "examples": ["unit_1", "unit_3"]
+                  },
+                  "source_facility_path": {
+                    "type": "string",
+                    "description": "Optional facility-specific absolute path to source data location. For documentation and convenience only - not validated or required for contract compliance. Useful when data is on shared storage accessible to multiple experiments.",
+                    "examples": [
+                      "/data/lambda/experiments/550e8400-e29b-41d4-a716-446655440000/raw_data/unit_1/",
+                      "/gpfs/als/experiment_archive/2025/03/lysozyme_original/raw_data/unit_1/"
+                    ]
+                  },
+                  "note": {
+                    "type": "string",
+                    "description": "Optional human-readable note explaining why this reference exists or what subset of data is being used",
+                    "examples": [
+                      "Using subset of original data for denoising algorithm comparison",
+                      "Original raw data from collaborative multi-facility campaign",
+                      "Reference to high-quality calibrated data from March 2025 run"
+                    ]
+                  }
+                }
+              },
+              "files": {
+                "type": "array",
+                "description": "Optional detailed listing of files within this unit. Can contain individual file entries, serial file group entries, or both. Use file groups for 10+ sequential files with consistent naming to reduce manifest size.",
+                "items": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/definitions/individual_file"
+                    },
+                    {
+                      "$ref": "#/definitions/serial_file_group"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+
+    "product_info": {
+      "type": "object",
+      "description": "Manifest of derived data products",
+      "additionalProperties": false,
+      "required": ["products"],
+      "properties": {
+        "products_uuid": {
+          "type": "string",
+          "description": "Optional globally unique identifier for this collection of products. A single UUID applies to ALL products in this experiment (experiment-level scope). This UUID represents the entire products collection, not individual products. Useful for tracking product collections and parentage relationships across workflows. Individual products are identified by their product_N IDs and workflow_run_ids. If products_uuid is provided, it should be unique per experiment and can be referenced in input_uuids.products_uuid by workflows in the same or related experiments.",
+          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+          "examples": ["a1b2c3d4-e5f6-7890-abcd-ef1234567890"],
+          "scope": "Experiment-level: one UUID for all products in the experiment",
+          "individual_product_identification": "Individual products are identified by: product_N ID (sequential), workflow_run_id (unique UUID per workflow), and optionally products_uuid (collection-level)"
+        },
+        "products": {
+          "type": "array",
+          "minItems": 0,
+          "description": "Array of data products. Can be empty if no processing has occurred.",
+          "items": {
+            "type": "object",
+            "required": ["id", "path", "description"],
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "type": "string",
+                "description": "Unique identifier for this product",
+                "pattern": "^product_[0-9]+$",
+                "examples": ["product_1", "product_2"]
+              },
+              "path": {
+                "type": "string",
+                "description": "Relative path to product directory from products/",
+                "pattern": "^\\./product_[0-9]+/$",
+                "examples": ["./product_1/", "./product_2/"]
+              },
+              "description": {
+                "type": "string",
+                "description": "What this product represents",
+                "examples": ["IMOD tomographic reconstruction", "DIALS indexed reflections"]
+              },
+              "name": {
+                "type": "string",
+                "description": "Optional human-readable identifier for this product. Can be used as a more memorable alternative to product_N numeric ID. Should be concise and descriptive. Examples: processing method, analysis type, or workflow identifiers.",
+                "minLength": 1,
+                "maxLength": 100,
+                "pattern": "^[A-Za-z0-9._\\-]+$",
+                "examples": ["imod_reconstruction", "dials_indexed", "refinement_final", "tomo-recon-v2"]
+              },
+              "status": {
+                "type": "string",
+                "description": "Operational status of this data product. Indicates whether the product is valid and should be used.",
+                "enum": ["active", "deleted", "deprecated", "invalid"],
+                "default": "active",
+                "definitions": {
+                  "active": "Product is valid and available for use (default if field omitted)",
+                  "deleted": "Product has been removed or is no longer available. Directory may or may not exist.",
+                  "deprecated": "Product is available but should not be used (e.g., superseded by reprocessing)",
+                  "invalid": "Product processing failed or results are known to be incorrect"
+                },
+                "examples": ["active", "deleted", "deprecated"]
+              }
+            }
+          }
+        }
+      }
+    },
+
+    "workflow": {
+      "type": "object",
+      "description": "Provenance metadata for a single processing workflow execution. Must exist as workflow.json within each product directory.",
+      "additionalProperties": false,
+      "required": ["workflow_run_id", "task_name", "software", "version", "timestamp", "data_input", "outputs"],
+      "properties": {
+        "workflow_run_id": {
+          "type": "string",
+          "description": "Unique stable identifier for this workflow execution (UUID recommended)",
+          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+          "examples": ["7c9e6679-7425-40de-944b-e07fc1f90ae7"]
+        },
+        "task_name": {
+          "type": "string",
+          "description": "Descriptive name of processing task",
+          "examples": ["Tomographic reconstruction", "Structure refinement", "Peak integration"]
+        },
+        "software": {
+          "type": "string",
+          "description": "Software package name",
+          "examples": ["IMOD", "RELION", "phenix.refine", "DIALS"]
+        },
+        "version": {
+          "type": "string",
+          "description": "Software version string",
+          "examples": ["4.12.5", "v1.2.3", "2024.1"]
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When this workflow was executed in ISO 8601 UTC format (must end with Z). Supports seconds precision (required) and optional fractional seconds (milliseconds, microseconds).",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]{1,6})?Z$",
+          "examples": ["2025-03-15T18:45:30Z", "2025-03-15T18:45:30.456Z", "2025-03-15T18:45:30.123456Z"]
+        },
+        "data_input": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^(?!/)(?!.*\\.\\.)[A-Za-z0-9._\\-/]+$"
+          },
+          "description": "Array of relative paths to input files (relative to experiment root). Should be consistent with input_uuids: if a file path references a unit (e.g., raw_data/unit_1/...), the corresponding unit_uuid should be listed in input_uuids.unit_uuids if unit_uuid is present for that unit.",
+          "examples": [
+            ["raw_data/unit_1/tilt_series.mrc", "raw_data/unit_1/tilt_angles.txt"],
+            ["products/product_1/indexed.refl", "raw_data/unit_1/strong_spots.cbf"]
+          ],
+          "consistency_note": "For consistency validation: if data_input contains paths referencing units (raw_data/unit_N/...), validators should check that corresponding unit UUIDs are present in input_uuids.unit_uuids when unit_uuid fields exist. Similarly, paths referencing products (products/product_N/...) should correspond to products_uuid in input_uuids if provided."
+        },
+        "input_uuids": {
+          "type": "object",
+          "description": "Optional tracking of UUID parentage for this workflow. Records which UUIDs from parent entities were used as inputs to generate this product. If provided, experiment_id is required.",
+          "additionalProperties": false,
+          "required": ["experiment_id"],
+          "properties": {
+            "experiment_id": {
+              "type": "string",
+              "description": "UUID of the parent experiment (must match experiment_info.experiment_id)",
+              "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+            },
+            "unit_uuids": {
+              "type": "array",
+              "description": "Array of unit UUIDs that were used as inputs to this workflow. Only include units that contributed data to this workflow.",
+              "items": {
+                "type": "string",
+                "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+              },
+              "examples": [["7c9e6679-7425-40de-944b-e07fc1f90ae7", "8d0f7780-8536-51ef-a55c-f18d2f01f9f8"]]
+            },
+            "products_uuid": {
+              "type": "string",
+              "description": "UUID of a parent products collection that was used as input (if this workflow processes outputs from a previous workflow)",
+              "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+              "examples": ["a1b2c3d4-e5f6-7890-abcd-ef1234567890"]
+            }
+          }
+        },
+        "run_parameters": {
+          "description": "Processing parameters: either path to parameter file (relative to product directory) OR inline JSON object. Paths may optionally start with ./ but are not required to.",
+          "oneOf": [
+            {
+              "type": "string",
+              "description": "Relative path to parameter file (relative to product directory). May optionally start with ./",
+              "pattern": "^(?!/)(?!.*\\.\\.)[A-Za-z0-9._\\-/]+$",
+              "examples": ["./parameters.txt", "parameters.txt", "./config.json", "config.json"]
+            },
+            {
+              "type": "object",
+              "description": "Inline parameter object",
+              "examples": [{"binning": 2, "thickness": 1000}]
+            }
+          ]
+        },
+        "outputs": {
+          "type": "array",
+          "minItems": 1,
+          "description": "Array of output files produced by this workflow. Can contain individual file entries, serial file group entries, or both. Use file groups for 10+ sequential files with consistent naming to reduce manifest size.",
+          "items": {
+            "oneOf": [
+              {
+                "$ref": "#/definitions/individual_file"
+              },
+              {
+                "$ref": "#/definitions/serial_file_group"
+              }
+            ]
+          }
+        },
+        "notes": {
+          "type": "string",
+          "description": "Additional notes about this workflow run"
+        }
+      }
+    },
+
+    "raw_metadata_info": {
+      "type": "object",
+      "description": "Manifest of auxiliary metadata files (calibrations, logs, external references)",
+      "additionalProperties": false,
+      "required": ["items"],
+      "properties": {
+        "items": {
+          "type": "array",
+          "minItems": 0,
+          "description": "Array of metadata items. Can be empty if no auxiliary metadata exists.",
+          "items": {
+            "type": "object",
+            "required": ["filename", "description", "sha256", "file_size", "mime_type"],
+            "additionalProperties": false,
+            "properties": {
+              "filename": {
+                "type": "string",
+                "description": "Metadata filename (within raw_metadata directory)"
+              },
+              "description": {
+                "type": "string",
+                "description": "Human- and machine-interpretable description: must state file format, acquisition context, how it relates to the experiment, and units for numerical values where applicable. Must provide sufficient context to use the file without opening it.",
+                "examples": [
+                  "JSON file containing microscope calibration parameters (pixel size, beam tilt, defocus) measured on 2025-03-15",
+                  "Plain text log of environmental conditions (temperature, humidity) during data collection, one reading per minute",
+                  "MRC format dark reference image from detector, acquired immediately before data collection session"
+                ]
+              },
+              "type": {
+                "type": "string",
+                "description": "Metadata category",
+                "enum": ["calibration", "instrument_log", "environmental", "sample_preparation", "external_reference", "other"]
+              },
+              "sha256": {
+                "type": "string",
+                "description": "SHA256 checksum of file contents",
+                "pattern": "^[a-fA-F0-9]{64}$"
+              },
+              "file_size": {
+                "type": "integer",
+                "description": "File size in bytes",
+                "minimum": 0
+              },
+              "mime_type": {
+                "type": "string",
+                "description": "MIME type of file",
+                "examples": ["application/json", "text/plain", "application/octet-stream"]
+              },
+              "allow_empty": {
+                "type": "boolean",
+                "description": "If true, zero-byte file is intentional (e.g., placeholder). Must be true for zero-byte files."
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+
+  "definitions": {
+    "description": "Reusable schema definitions referenced by multiple schemas per JSON Schema standard (Draft 4-7 convention)",
+    "individual_file": {
+      "type": "object",
+      "description": "Individual file entry. Used in raw_data files, workflow outputs, and raw_metadata. The 'type' field can specify file format (e.g., 'mrc', 'hdf5') or for workflow outputs can specify output classification (e.g., 'tomogram', 'model'). The 'schema_id' field is used in workflow outputs to reference external product schemas.",
+      "required": ["filename", "description", "sha256", "file_size", "mime_type"],
+      "additionalProperties": false,
+      "properties": {
+        "filename": {
+          "type": "string",
+          "description": "Filename within directory"
+        },
+        "description": {
+          "type": "string",
+          "description": "What this file contains"
+        },
+        "type": {
+          "type": "string",
+          "description": "File type/format or output classification (optional). For raw data: file format (e.g., 'mrc', 'hdf5', 'tiff', 'cbf'). For workflow outputs: can be output type classification (e.g., 'tomogram', 'model', 'plot', 'log', 'table').",
+          "examples": ["mrc", "tiff", "hdf5", "cbf", "tomogram", "model", "plot", "log", "table"]
+        },
+        "sha256": {
+          "type": "string",
+          "description": "SHA256 checksum of file contents",
+          "pattern": "^[a-fA-F0-9]{64}$"
+        },
+        "file_size": {
+          "type": "integer",
+          "description": "File size in bytes",
+          "minimum": 0
+        },
+        "mime_type": {
+          "type": "string",
+          "description": "MIME type of file",
+          "examples": ["application/octet-stream", "image/tiff", "application/x-hdf"]
+        },
+        "allow_empty": {
+          "type": "boolean",
+          "description": "If true, zero-byte file is intentional (e.g., placeholder). Must be true for zero-byte files."
+        },
+        "schema_id": {
+          "type": "string",
+          "description": "Optional ID of an external product schema in a central registry (e.g. 'cryoet/tomogram/v1'). Used in workflow outputs to reference standardized product schemas. Validators MAY ignore unknown or missing schema_id in contract_version 0.2.x.",
+          "examples": ["cryoet/tomogram/v1", "crystallography/mtz/v1", "em/half_map/v1"]
+        }
+      }
+    },
+    "serial_file_group": {
+      "type": "object",
+      "description": "File group entry for serial files with sequential numbering. Use for 10+ sequential files with consistent naming to reduce manifest size.",
+      "required": ["pattern", "range", "description", "mime_type", "file_group"],
+      "additionalProperties": false,
+      "properties": {
+        "file_group": {
+          "type": "string",
+          "const": "serial",
+          "description": "Discriminator field indicating this is a file group entry. Must be 'serial'."
+        },
+        "pattern": {
+          "type": "string",
+          "description": "Filename pattern where # characters represent serial number digits. Number of # characters indicates zero-padding width. Examples: 'rotation_####.h5' (4-digit padding), 'frame_###.mrc' (3-digit padding), 'image_#.tiff' (no padding)",
+          "pattern": "^[A-Za-z0-9._\\-]+#{1,}\\.[A-Za-z0-9]+$",
+          "examples": [
+            "rotation_####.h5",
+            "tilt_series_###.mrc",
+            "frame_#.tiff",
+            "data_######.cbf"
+          ]
+        },
+        "range": {
+          "type": "string",
+          "description": "Serial number range(s) included in this group. Format: 'start-end' or 'start1-end1,start2-end2,...' for multiple ranges. Ranges are inclusive. Numbers use the padding specified in pattern. Examples: '1-100' (frames 1 through 100), '001-034,037-100' (frames 1-34 and 37-100, skipping 35-36), '0001-3600' (frames 1 through 3600 with 4-digit padding)",
+          "pattern": "^[0-9]+(-[0-9]+)?(,[0-9]+(-[0-9]+)?)*$",
+          "examples": [
+            "1-100",
+            "001-034,037-100",
+            "0001-3600",
+            "1-10,15-20,25-30"
+          ]
+        },
+        "description": {
+          "type": "string",
+          "description": "Description of what this file group contains",
+          "examples": [
+            "Rotation series diffraction images, 1 degree oscillation per frame",
+            "Tilt series electron microscopy images, -60 to +60 degrees",
+            "Raster scan grid images"
+          ]
+        },
+        "type": {
+          "type": "string",
+          "description": "File type/format (optional)",
+          "examples": ["hdf5", "mrc", "tiff", "cbf"]
+        },
+        "mime_type": {
+          "type": "string",
+          "description": "MIME type for all files in this group (must be consistent across group)",
+          "examples": ["application/x-hdf", "application/octet-stream", "image/tiff"]
+        },
+        "typical_file_size": {
+          "type": "integer",
+          "description": "Typical file size in bytes for files in this group. For validation and storage estimation. Individual files may vary.",
+          "minimum": 0,
+          "examples": [5242880, 10485760]
+        },
+        "total_size": {
+          "type": "integer",
+          "description": "Total size in bytes of all files in this group. Sum of all individual file sizes.",
+          "minimum": 0,
+          "examples": [52428800, 1073741824]
+        },
+        "checksum_file": {
+          "type": "string",
+          "description": "Optional path to separate file containing SHA256 checksums for each file in the group. Relative to unit directory. Format: one line per file, 'checksum filename'. Enables validation without listing every checksum in manifest.",
+          "pattern": "^(?!/)(?!.*\\.\\.)[A-Za-z0-9._\\-/]+$",
+          "examples": ["checksums.txt", "rotation_checksums.sha256"]
+        },
+        "allow_empty": {
+          "type": "boolean",
+          "description": "If true, zero-byte files are intentional in this group"
+        }
+      }
+    }
+  },
+
+  "controlled_vocabularies": {
+    "facilities": [
+      "ALS",
+      "NSLSII",
+      "APS",
+      "SNS",
+      "EMSL",
+      "SLAC",
+      "LCLS",
+      "other"
+    ],
+    "techniques": [
+      "cryo-ET",
+      "cryo-EM",
+      "RX",
+      "SX",
+      "SFX",
+      "SAXS",
+      "WAXS",
+      "SANS",
+      "WANS",
+      "XRD",
+      "EMD",
+      "SEDX",
+      "other"
+    ],
+    "product_types": [
+      "reconstruction",
+      "tomogram",
+      "alignment",
+      "segmentation",
+      "model",
+      "refinement",
+      "analysis",
+      "visualization",
+      "molecular_model",
+      "other"
+    ],
+    "metadata_types": [
+      "calibration",
+      "instrument_log",
+      "environmental",
+      "sample_preparation",
+      "external_reference",
+      "other"
+    ]
+  },
+
+  "validation_rules": {
+    "root_directory": {
+      "strict_enforcement": true,
+      "allowed_contents": ["experiment_info.json", "raw_data/", "products/", "raw_metadata/"],
+      "violation_message": "Root directory must contain EXACTLY four items: experiment_info.json and three subdirectories. Any additional files or directories are contract violations.",
+      "directory_naming": "The experiment root directory name MUST follow structured format: facility_instrument_YYYYMMDD_uuidlast_samplename. See directory_structure.root_naming for complete specification. This is REQUIRED for all datasets conforming to contract_version 0.2.0.",
+      "directory_name_validation": "Validators must verify: (1) directory name matches pattern ^[a-z]+_[a-z0-9_]+_[0-9]{8}_[0-9a-f]{12}_[a-z0-9_]+$, (2) components are consistent with experiment_info fields (facility.name, date, experiment_id last block, facility.instrument, sample_name), (3) total length does not exceed 200 characters",
+      "hidden_files": "Reject any hidden files or system artifacts (e.g., .DS_Store, ._*, .gitkeep)",
+      "symlinks": "Permit symlinks only if resolved target remains inside experiment root",
+      "external_data_references": "Units with external_data_reference field MAY have empty or minimal directory content. This is not a validation failure. Validators must check for external_data_reference before enforcing directory content requirements."
+    },
+    "experiment_id": {
+      "format": "UUID in canonical 8-4-4-4-12 hexadecimal form",
+      "assumed_unique": true,
+      "collision_handling": "UUID collisions treated as negligibly probable; no central registry required"
+    },
+    "facility_experiment_id": {
+      "required": true,
+      "format": "Non-empty string, facility-specific format",
+      "max_length": 200,
+      "description": "Facility's internal identifier for cross-referencing. Format is facility-specific and may include alphanumeric characters, hyphens, underscores, and periods.",
+      "validation": "Must be non-empty and not exceed 200 characters. No strict pattern enforcement to accommodate facility-specific naming conventions."
+    },
+    "experiment_name": {
+      "required": false,
+      "format": "Non-empty string if provided",
+      "max_length": 200,
+      "description": "Human-readable shorthand name. STRONGLY RECOMMENDED (though technically optional) for improved discoverability and usability.",
+      "validation": "If provided, must be non-empty and not exceed 200 characters.",
+      "recommendation": "All facilities should provide experiment_name. Tools and interfaces should display experiment_name prominently as the primary human-facing identifier."
+    },
+    "related_experiments": {
+      "required": false,
+      "format": "Array of UUIDs",
+      "description": "Array of related experiment identifiers for multi-facility campaigns",
+      "validation": "If provided, must be an array of valid UUIDs. Each UUID must match the experiment_id format. CRITICAL: No entry in related_experiments may match the current experiment_id (self-reference is not permitted). This validation cannot be expressed in JSON Schema alone - validators MUST perform programmatic cross-field validation: compare each entry in related_experiments array against experiment_info.experiment_id and reject if any match. Validators must reject datasets where related_experiments contains the same UUID as experiment_info.experiment_id.",
+      "self_reference_prevention": "related_experiments must not contain experiment_id. Requires programmatic validation (not expressible in JSON Schema)."
+    },
+    "orcid": {
+      "PI_required": true,
+      "team_members_optional": true,
+      "validation": "If provided, must satisfy ORCID checksum rules. JSON Schema pattern validates format (16 digits in 4-4-4-4 pattern with checksum character), but validators MUST perform ORCID checksum validation programmatically. ORCID uses ISO 7064 Mod 11,10 checksum algorithm. Pattern validation is necessary but not sufficient - external checksum validation required.",
+      "checksum_validation": "Validators must implement ORCID checksum algorithm (ISO 7064 Mod 11,10) or use a validated ORCID library. Pattern matching alone is insufficient."
+    },
+    "facility": {
+      "required": true,
+      "format": "Object with required name and instrument fields",
+      "description": "Facility information including facility name and instrument. This nested structure enforces that instruments are always associated with a specific facility.",
+      "validation": "facility.name must be from controlled vocabulary enum (ALS, NSLSII, APS, SNS, EMSL, SLAC, LCLS, other). facility.instrument is required and must be a non-empty string. Both fields are required.",
+      "structure": "facility: { name: string (enum), instrument: string }"
+    },
+    "technique_instrument_consistency": {
+      "description": "Maintain mapping of allowed technique-facility.instrument pairs",
+      "enforcement": "Reject any combination not explicitly whitelisted",
+      "note": "Specific mappings to be defined per facility. References experiment_info.technique and experiment_info.facility.instrument."
+    },
+    "content": {
+      "required": false,
+      "format": "Object containing sample content information, including molecular components",
+      "description": "Sample content information including molecular components and other content-related metadata. The content object provides a namespace for organizing all information about what is in the sample.",
+      "validation": "If provided, must be an object. The content object may contain a 'components' property. Empty content object {} is valid but not useful. If content is present, it is recommended to include at least 'components'. Additional properties beyond 'components' are not permitted (additionalProperties: false).",
+      "components": {
+        "required": false,
+        "format": "Object with keys for each component type (protein, DNA, RNA, ligands, metals, other), each containing an array of component entries",
+        "description": "Molecular components organized by type, similar to PDB organization where different molecule types are separated into distinct sections. This structure improves queryability and clarity compared to a flat array with component type discrimination.",
+        "validation": "If provided, must be an object. All component type keys are optional, but at least one must be present. Component-specific requirements: (1) 'protein', 'DNA', 'RNA' arrays: Each entry MUST have 'sequence' field, MUST NOT have 'stereo_smiles'. 'sequid2' is optional. (2) 'ligands' and 'metals' arrays: Each entry MUST have 'stereo_smiles' field, MUST NOT have 'sequence', MUST NOT have 'sequid2'. Charges in ligands/metals are encoded within the SMILES string using bracket notation (e.g., [Na+], [Cl-], [Zn+2]). (3) 'other' array: Each entry MUST have either 'sequence' OR 'stereo_smiles' (but not both). 'sequid2' is optional. Sequence format validation: If sequence starts with '>', require FASTA format. Otherwise, expect a single-line canonical sequence string. Validator should check basic format consistency but sequence alphabet enforcement is deferred to domain-specific tools. Stereo_smiles validation: Must conform to SMILES specification (Daylight Theory Manual, or OpenSMILES specification). Validators should use a standard SMILES parser (e.g., RDKit, OpenEye, CDK) to validate syntax. Charges must be encoded using bracket notation (e.g., [Na+], [Cl-], [Zn+2], [NH3+]).",
+        "structure": "Object with optional keys: protein (array), DNA (array), RNA (array), ligands (array), metals (array), other (array). Protein/DNA/RNA/other arrays contain objects with type-specific required fields and optional sequid2. Ligands and metals arrays contain objects with only stereo_smiles (no sequid2).",
+        "component_requirements": {
+          "protein": "Array entries REQUIRE sequence, REJECT stereo_smiles. sequid2 is optional.",
+          "DNA": "Array entries REQUIRE sequence, REJECT stereo_smiles. sequid2 is optional.",
+          "RNA": "Array entries REQUIRE sequence, REJECT stereo_smiles. sequid2 is optional.",
+          "ligands": "Array entries REQUIRE stereo_smiles, REJECT sequence, REJECT sequid2. Charges encoded in SMILES (e.g., [Na+], [Cl-]).",
+          "metals": "Array entries REQUIRE stereo_smiles, REJECT sequence, REJECT sequid2. Charges encoded in SMILES (e.g., [Zn+2], [Fe+3]).",
+          "other": "Array entries REQUIRE either sequence OR stereo_smiles (not both). sequid2 is optional."
+        },
+        "pdb_alignment": "This structure aligns with PDB organization principles where different molecule types (polymers vs heteroatoms) are separated into distinct sections for clarity and queryability"
+      }
+    },
+    "raw_unit_definition": {
+      "rule": "One unit = one physical biological specimen",
+      "multiple_runs": "Multiple runs from same specimen must be subdirectories of that unit",
+      "reject": "Multiple physical samples collapsed into one unit"
+    },
+    "unit_uuid": {
+      "required": false,
+      "format": "UUID in canonical 8-4-4-4-12 hexadecimal form",
+      "description": "Optional globally unique identifier for data units. If provided, must be valid UUID format. Useful for cross-referencing units across federated systems.",
+      "validation": "If provided, must match UUID pattern. Unit UUIDs MUST be unique within an experiment (no two units in the same experiment may share the same unit_uuid). Global uniqueness across all experiments is recommended but not enforced at contract level. Validators must check uniqueness within raw_data_info.units array.",
+      "uniqueness": "REQUIRED within experiment scope. Validators must reject datasets where multiple units share the same unit_uuid. Global uniqueness recommended for federation."
+    },
+    "paths": {
+      "format": "relative; may optionally start with ./",
+      "directories": "Fields that represent directory paths MUST end with /. Fields that represent file paths MUST NOT end with /.",
+      "safety": "Resolve every path; reject any that uses .. or escapes experiment root through symlink traversal",
+      "no_absolute_paths": true,
+      "no_urls": "URLs not permitted inside path fields",
+      "no_parent_segments": "Path components must not include ..; paths are always evaluated relative to experiment root or explicitly stated base directory"
+    },
+    "file_manifest_integrity": {
+      "required_fields": ["sha256", "file_size", "mime_type"],
+      "sha256": "256-bit hexadecimal checksum",
+      "reject_mismatched": true,
+      "zero_byte_files": "Reject files with file_size = 0 unless allow_empty is true",
+      "scope": "If a files array is present for a raw data unit, it must enumerate all files in that directory; missing files are considered violations.",
+      "optional_fields": {
+        "type": "Optional file type/format or output classification. No validation required - accepts any string.",
+        "schema_id": "Optional product schema reference. Primarily used in workflow outputs. Validators MAY ignore unknown schema_id values in contract_version 0.2.x."
+      }
+    },
+    "product_provenance": {
+      "workflow_json": "Exactly one workflow.json per product directory",
+      "workflow_run_id": "Must be unique and stable UUID. Uniqueness scope: workflow_run_id must be unique within the experiment (no two workflows in the same experiment may share the same workflow_run_id). Global uniqueness across all experiments is recommended but not enforced at contract level. Validators must check uniqueness across all workflow.json files in products/product_N/ directories.",
+      "reject_multiple": "Reject if multiple workflow definitions exist",
+      "uniqueness_scope": "Within experiment (required), globally (recommended)",
+      "validation_mechanism": "Validators must scan all products/product_N/workflow.json files and verify workflow_run_id uniqueness within the experiment"
+    },
+    "products_uuid": {
+      "required": false,
+      "format": "UUID in canonical 8-4-4-4-12 hexadecimal form",
+      "description": "Optional globally unique identifier for a collection of products. A single UUID applies to all products within an experiment. Useful for tracking product collections and establishing parentage relationships across workflows.",
+      "validation": "If provided, must match UUID pattern. Should be unique within the experiment scope. All products in a single experiment share the same products_uuid if provided.",
+      "uniqueness": "Recommended: products_uuid should be unique per experiment"
+    },
+    "input_uuids": {
+      "required": false,
+      "description": "Optional parentage tracking for workflows. Records which UUIDs from parent entities (experiment, units, or previous products) were used as inputs.",
+      "validation": "If provided, experiment_id is REQUIRED and must match the parent experiment (experiment_info.experiment_id). Cross-reference validation: (1) unit_uuids array entries must reference actual unit UUIDs present in raw_data_info.units[*].unit_uuid. Validators must verify each UUID in unit_uuids exists in the experiment's raw_data_info.json. (2) products_uuid must reference a valid products collection UUID. For same-experiment references: must match product_info.products_uuid if present. For cross-experiment references (multi-facility workflows): must reference a products_uuid from a related experiment listed in experiment_info.related_experiments. Validators must have access to related experiment manifests to validate cross-experiment references, or mark them as 'unverifiable' if manifests are not available. (3) experiment_id must exactly match experiment_info.experiment_id. Validators must perform cross-file validation to ensure all referenced UUIDs exist.",
+      "parentage_tracking": "Enables tracking of data lineage: which experiment, units, and/or previous products contributed to generating this product",
+      "experiment_id_requirement": "If input_uuids object is present, experiment_id field is required within it",
+      "cross_reference_validation": "Validators must verify: unit_uuids reference actual units in raw_data_info.json, products_uuid references valid products collection (same experiment or related experiment), experiment_id matches experiment_info.experiment_id",
+      "cross_experiment_validation": "For multi-facility workflows: if products_uuid references a related experiment, validators should attempt to verify against related experiment manifests. If manifests are unavailable (e.g., related experiment not accessible), validators MUST skip cross-experiment validation for that reference but MUST still validate format and consistency within the current experiment. This is documented as a known limitation in contract_version 0.2.x.",
+      "data_input_consistency": "Validators should check consistency between data_input paths and input_uuids: files from units should have corresponding unit UUIDs in input_uuids.unit_uuids when unit_uuid fields exist."
+    },
+    "timestamps": {
+      "format": "ISO 8601 UTC with explicit Z suffix",
+      "reject": "local-time timestamps or timezone offsets",
+      "pattern": "YYYY-MM-DDTHH:MM:SS[.fractional]Z where fractional seconds are optional (1-6 digits)",
+      "precision": "Seconds precision required, fractional seconds (milliseconds/microseconds) optional but recommended for high-precision timing",
+      "examples": ["2025-03-15T14:30:00Z", "2025-03-15T14:30:00.123Z", "2025-03-15T14:30:00.123456Z"]
+    },
+    "raw_metadata_descriptions": {
+      "semantic_completeness": ["file format", "acquisition context", "semantic linkage to experiment", "units for numerical values"],
+      "reject": "vague or incomplete descriptions"
+    },
+    "vocabulary_extensions": {
+      "wrapper": "All extension fields must be within an _extensions_ object",
+      "required_meta": "Extensions should include _meta object with facility, version, and documentation",
+      "required_documentation": ["definition text for each field", "provenance", "sponsoring facility in _meta"],
+      "reject": "extension fields outside _extensions_ wrapper or lacking proper documentation"
+    },
+    "sequential_numbering": {
+      "units": "Sequential starting from unit_1 (e.g., unit_1, unit_2, unit_3, ...). Numbering must be strictly increasing integers with no duplicates. Gaps are PERMITTED to accommodate deleted or deprecated units without requiring renumbering of the entire dataset. Example: unit_1, unit_3, unit_5 is valid if unit_2 and unit_4 were removed.",
+      "products": "Sequential starting from product_1 (e.g., product_1, product_2, product_3, ...). Numbering must be strictly increasing integers with no duplicates. Gaps are PERMITTED to accommodate deleted or deprecated products without requiring renumbering of the entire dataset. Example: product_1, product_4, product_7 is valid if intermediate products were removed.",
+      "rationale": "Gaps allow facilities to remove invalid data units or products without forcing renumbering of all subsequent items, which would break existing references and require massive file reorganization. Strict sequential-with-no-gaps policy creates operational burden and brittleness.",
+      "validation": "Validators must verify: (1) IDs start from 1, (2) all IDs are positive integers, (3) no duplicate IDs exist, (4) IDs match their directory names exactly. Gaps are explicitly permitted.",
+      "recommendation": "Avoid creating gaps unnecessarily, but when data must be removed, leaving gaps is preferred over renumbering.",
+      "status_tracking": "Optional: use status field to mark deleted/deprecated items explicitly rather than removing them from manifests"
+    },
+    "status_field": {
+      "required": false,
+      "description": "Optional status field for units and products to track operational state",
+      "default_value": "active (if field is omitted)",
+      "validation": "If provided, must be one of the enumerated values: active, deleted, deprecated, invalid. CRITICAL: If status='active' (or omitted, defaulting to active), the directory MUST exist - this is a FATAL error if missing. If status='deleted'/'deprecated'/'invalid', the directory MAY be absent (not fatal). All status mismatches are fatal errors per validator_directive - no warnings permitted.",
+      "use_case": "Allows marking data as deleted/deprecated without removing from manifest, preserving gap documentation and audit trail",
+      "strict_mode": "All status mismatches are fatal errors, not warnings. No warnings permitted per validator_directive."
+    },
+    "name_field": {
+      "required": false,
+      "description": "Optional human-readable name field for units and products",
+      "validation": "If provided, must be 1-100 characters, alphanumeric with underscores, hyphens, and periods only. Names do NOT need to be unique (multiple units can share the same name), but should be meaningfully descriptive.",
+      "rationale": "Provides human-friendly identifiers without replacing the numeric ID system required for contract structure",
+      "uniqueness": "NOT enforced - multiple units or products may share the same name",
+      "guidance": "While uniqueness is not enforced, facilities are encouraged to use unique names within an experiment when possible for clarity. Unit names and product names exist in separate namespaces (a unit_1 and product_1 can share the same name without conflict)."
+    },
+    "external_data_reference": {
+      "required": false,
+      "description": "Optional field in raw_data_info.units[*] for referencing raw data from another LAMBDA-compliant experiment without physical duplication",
+      "trust_model": "TRUST-BASED in contract_version 0.2.x. Validators cannot verify that referenced experiments exist or contain the specified units without full federation infrastructure. Cross-experiment validation is deferred to future versions.",
+      "validation_requirements": {
+        "format_validation": "If external_data_reference is provided: (1) source_experiment_id must be valid UUID format, (2) source_unit_id must match unit_N pattern",
+        "related_experiments_linkage": "source_experiment_id MUST be listed in experiment_info.related_experiments. Validators MUST reject datasets where external_data_reference.source_experiment_id is not present in experiment_info.related_experiments. This enforces explicit linkage and prevents orphaned references.",
+        "directory_handling": "When external_data_reference is present for a unit, the unit's directory (raw_data/unit_N/) MAY be: (a) completely empty (just placeholder), (b) contain a symlink to source location, (c) contain a reference descriptor file (e.g., external_reference.json), or (d) contain actual data (for cached/subset cases). Validators MUST NOT fail if directory is empty or minimal when external_data_reference is present.",
+        "files_array_handling": "When external_data_reference is present: (1) The files array is OPTIONAL (not required even if normally required). (2) If files array is provided, it documents the files in the referenced source location but checksums are NOT validated (treat as documentation). (3) If files array is omitted, this implies 'see source experiment for complete file manifest'.",
+        "cross_reference_verification": "Validators CANNOT verify in 0.2.x that: (1) source experiment exists, (2) source experiment is LAMBDA-compliant, (3) source_unit_id exists in source experiment, (4) source files match documented checksums. These verifications require federation infrastructure planned for future contract versions.",
+        "consistency_check": "If multiple units in the same experiment reference the same source_experiment_id, that source_experiment_id MUST appear in related_experiments. This is validated per external_data_reference (each reference must have its source_experiment_id in related_experiments)."
+      },
+      "implementation_guidance": {
+        "symlink_handling": "Facilities MAY use filesystem symlinks to reference external data. Validators should follow symlinks when checking file existence but must verify symlink targets remain within allowed boundaries (no escaping experiment roots via symlink traversal).",
+        "caching_strategy": "Facilities MAY cache subsets of external data locally in the unit directory while maintaining external_data_reference for provenance. This is valid and does not require removing the external_data_reference field.",
+        "provenance_chain": "External references create provenance chains. Analysis tools should follow these chains to construct complete data lineage graphs."
+      },
+      "future_evolution": "Future contract versions (0.3.0+) with federation infrastructure may: (1) Enable verification of external references through federation API, (2) Add checksum verification for externally referenced files, (3) Support access control integration, (4) Enable cross-experiment validation of referenced units"
+    },
+    "serial_file_groups": {
+      "required": false,
+      "description": "File groups using pattern-based serial notation for sequential files. Enables compact representation of hundreds/thousands of sequentially numbered files without bloating manifests.",
+      "pattern_syntax": {
+        "description": "Pattern uses # characters to indicate serial number position and zero-padding",
+        "rules": [
+          "# character represents a single digit of the serial number",
+          "Number of # characters indicates zero-padding width",
+          "Example: #### means 4-digit padding (0001, 0002, ...)",
+          "Example: ### means 3-digit padding (001, 002, ...)",
+          "Example: # means no padding (1, 2, ...)",
+          "Pattern must contain at least one # character",
+          "Pattern must have file extension after #'s"
+        ]
+      },
+      "range_syntax": {
+        "description": "Range specifies which serial numbers are included",
+        "format": "start-end or start1-end1,start2-end2,... for multiple ranges",
+        "rules": [
+          "Ranges are inclusive (1-100 includes both 1 and 100)",
+          "Multiple ranges separated by commas (no spaces)",
+          "Ranges must be in ascending order",
+          "Ranges must not overlap",
+          "Numbers in range must match padding width from pattern",
+          "Example: pattern='file_###.h5' with range='001-100' is valid",
+          "Example: pattern='file_###.h5' with range='1-100' is INVALID (missing padding)",
+          "Gaps indicated by multiple ranges: '001-034,037-100' skips 035-036"
+        ]
+      },
+      "validation": {
+        "pattern_format": "Validators must verify pattern matches regex: ^[A-Za-z0-9._\\-]+#{1,}\\.[A-Za-z0-9]+$",
+        "range_format": "Validators must verify range matches regex: ^[0-9]+(-[0-9]+)?(,[0-9]+(-[0-9]+)?)*$",
+        "padding_consistency": "Validators must verify: (1) Count # characters in pattern (e.g., #### = 4 digits), (2) Verify all numbers in range have exactly that many digits (e.g., 0001-0100, not 1-100)",
+        "range_ordering": "Validators must verify: (1) Ranges are in ascending order, (2) No overlapping ranges, (3) Each range has start <= end",
+        "file_existence": "Validators should verify a sample of files exist (e.g., first, middle, last of each range). Full validation of all files optional but recommended.",
+        "checksum_validation": "If checksum_file is provided: (1) File must exist in unit directory, (2) Must contain one line per file in the group, (3) Each line format: exactly 64 lowercase hexadecimal characters (SHA256 checksum), followed by one or more spaces, followed by filename (standard SHA256SUMS format), (4) No blank lines or comments permitted, (5) File order does not need to match range order, (6) Validators MUST verify checksums for a sample of files by computing actual SHA256 and comparing to value in checksum file (recommend: first, middle, last of each range, plus random 1% sample)",
+        "format_specification": {
+          "line_format": "<64_hex_chars><whitespace><filename>",
+          "example": "a1b2c3d4e5f67890123456789012345678901234567890123456789012345678 rotation_0001.h5",
+          "checksum_format": "Exactly 64 lowercase hexadecimal characters [0-9a-f]{64}",
+          "whitespace": "One or more space or tab characters",
+          "filename_format": "Must match actual filename from expanded pattern+range"
+        }
+      },
+      "expansion": {
+        "description": "How to expand a file group pattern to individual filenames",
+        "algorithm": [
+          "1. Parse pattern to find # character sequence and extract prefix/suffix",
+          "2. Determine padding width from number of # characters",
+          "3. Parse range to extract individual ranges (split on comma)",
+          "4. For each range start-end:",
+          "   a. For serial number from start to end (inclusive):",
+          "      i. Zero-pad number to padding width",
+          "      ii. Replace # sequence with padded number",
+          "      iii. Construct filename: prefix + padded_number + suffix",
+          "5. Return list of all filenames across all ranges"
+        ],
+        "examples": [
+          {
+            "pattern": "rotation_####.h5",
+            "range": "0001-0003",
+            "expands_to": ["rotation_0001.h5", "rotation_0002.h5", "rotation_0003.h5"]
+          },
+          {
+            "pattern": "frame_###.mrc",
+            "range": "001-003,007-009",
+            "expands_to": ["frame_001.mrc", "frame_002.mrc", "frame_003.mrc", "frame_007.mrc", "frame_008.mrc", "frame_009.mrc"]
+          },
+          {
+            "pattern": "image_#.tiff",
+            "range": "1-5",
+            "expands_to": ["image_1.tiff", "image_2.tiff", "image_3.tiff", "image_4.tiff", "image_5.tiff"]
+          }
+        ]
+      },
+      "when_to_use": {
+        "use_serial_groups": [
+          "10+ sequential files with consistent naming",
+          "All files in group have same mime_type",
+          "All files similar size (within order of magnitude)",
+          "Sequential numbering with consistent padding"
+        ],
+        "use_individual_entries": [
+          "Fewer than 10 files",
+          "Files have different mime_types",
+          "Files have widely varying sizes",
+          "Non-sequential or irregular naming",
+          "Individual checksums critical (though checksum_file can address this)"
+        ]
+      },
+      "mixed_usage": {
+        "description": "A single files array can contain both individual file entries and file group entries",
+        "example": [
+          "// Individual file",
+          "{",
+          "  \"filename\": \"metadata.json\",",
+          "  \"description\": \"Acquisition metadata\",",
+          "  \"sha256\": \"abc123...\",",
+          "  \"file_size\": 4096,",
+          "  \"mime_type\": \"application/json\"",
+          "},",
+          "// File group",
+          "{",
+          "  \"file_group\": \"serial\",",
+          "  \"pattern\": \"rotation_####.h5\",",
+          "  \"range\": \"0001-0360\",",
+          "  \"description\": \"Rotation series diffraction images\",",
+          "  \"mime_type\": \"application/x-hdf\",",
+          "  \"typical_file_size\": 5242880,",
+          "  \"total_size\": 1887436800,",
+          "  \"checksum_file\": \"rotation_checksums.sha256\"",
+          "}"
+        ]
+      }
+    },
+    "json_files": {
+      "encoding": "UTF-8",
+      "format": "valid JSON (no trailing commas, proper escaping)",
+      "validation": "Must validate against corresponding schema"
+    },
+    "workflow_reproducibility": {
+      "version_identifiers": "Explicit version strings required; reject 'latest', 'current', or Git branches",
+      "completeness": "List ALL input files and ALL generated outputs",
+      "reject": "partial provenance"
+    },
+    "forbidden_content": {
+      "reject": [
+        "absolute paths",
+        "URLs inside path fields",
+        "encrypted files without decryption keys",
+        "proprietary binary blobs lacking format specification"
+      ]
+    },
+    "schema_version_coupling": {
+      "declaration": "Each dataset must declare exact contract_version used",
+      "validation": "Validator must compare experiment_info.contract_version to its own contract_version. If major or minor version differ, dataset MUST be rejected. Patch-level differences (e.g., 0.2.0 vs 0.2.1) MAY be accepted if declared compatible by the implementation, but this is implementation-specific and not guaranteed."
+    },
+    "external_schemas": {
+      "description": "workflow.outputs[*].schema_id may declare an optional schema identifier referring to a central schema registry.",
+      "enforcement_0_2_x": "In contract_version 0.2.x, validators MUST NOT fail a dataset solely because schema_id is missing or unknown.",
+      "future_evolution": "Future contract versions or addendums MAY require specific schema_id values for certain techniques or products and enforce external schema validation."
+    },
+    "error_handling": {
+      "severity": "All violations are fatal; no warnings",
+      "output_format": ["rule violated", "path to offending file", "expected vs actual value"]
+    }
+  },
+
+  "extension_points": {
+    "technique_specific_fields": {
+      "description": "Additional fields can be added for technique-specific metadata using an _extensions_ wrapper object",
+      "namespace": "All extension fields must be placed inside an _extensions_ object at the appropriate schema level",
+      "allowed_locations": [
+        "experiment_info.json (root level)",
+        "raw_data/raw_data_info.json units (per-unit level)",
+        "products/product_N/workflow.json (per-workflow level)",
+        "raw_metadata/raw_metadata_info.json items (per-item level)"
+      ],
+      "exhaustive": "This list is exhaustive; _extensions_ is not permitted at any other location in the contract",
+      "structure": {
+        "_meta": {
+          "description": "Optional metadata about the extensions themselves",
+          "fields": ["facility", "version", "documentation"]
+        },
+        "extension_fields": "Arbitrary fields specific to technique, facility, or workflow"
+      },
+      "example": {
+        "_extensions_": {
+          "_meta": {
+            "facility": "ALS",
+            "version": "1.0",
+            "documentation": "https://als.lbl.gov/lambda-extensions"
+          },
+          "tilt_range": [-60, 60],
+          "detector_distance": 5.0
+        }
+      },
+      "coordinate_frames": "Facilities MAY include coordinate_frame within _extensions_ (e.g., pixel_size, axis_convention, handedness, detector_distance) if convenient, but this is NOT required in contract_version 0.2.x. NOTE: For imaging techniques (cryo-ET, cryo-EM, etc.), coordinate frame metadata (pixel_size, detector_distance, axis conventions) is critical for interoperability. While optional in 0.2.x, facilities are STRONGLY ENCOURAGED to include these fields in _extensions_ with standardized field names. Future contract versions may make these first-class required fields."
+    },
+    "custom_vocabularies": {
+      "description": "Facilities can propose additions to controlled vocabularies",
+      "process": "Submit via LAMBDA governance process with use case justification"
+    },
+    "schema_evolution": {
+      "description": "Contract versions follow semantic versioning. Version 0.2.0 is the first stable version. Previous versions (0.1.x) were draft and are not supported.",
+      "versioning": "Major version updates (x.0.0) may introduce breaking changes. Minor version updates (0.x.0) may add features but maintain compatibility. Patch versions (0.0.x) are bug fixes only."
+    }
+  },
+
+  "implementation_notes": {
+    "federation_model": "Facilities maintain internal data organization but must provide translation layer to this contract format",
+    "translation_determinism": "Translation must be deterministic: same internal dataset must always yield identical contract output, byte-for-byte. If translation is lossy, required fields must document what information cannot be preserved.",
+    "data_scope": "One experiment = one sample type, one facility, one collection session",
+    "data_unit_definition": "One unit = data from single biological sample",
+    "product_definition": "One product = output from single software/pipeline execution (single command/workflow)",
+    "symlinks_vs_copies": "Implementation may use symlinks or copies; contract specifies logical structure only",
+    "partial_compliance": "Facilities unable to provide optional fields should omit them. Missing required fields constitute contract violations.",
+    "validation_tooling": "Reference validator implementation available at [TBD]",
+    "workflow_executability": "Future work: certification that stated software/pipeline can run with stated inputs. Currently focuses on data provenance rather than computational reproducibility infrastructure.",
+    "root_evolution": "contract_version 0.2.x requires exactly four items at the experiment root: experiment_info.json, raw_data/, products/, raw_metadata/. Future contract versions MAY expand the allowed root contents via explicit contract revision; additional directories are not permitted in 0.2.x.",
+    "human_readability_practices": {
+      "principle": "Balance machine-readable federation (UUIDs) with human usability (readable names, flexible numbering)",
+      "directory_naming": "Top-level experiment directories MUST follow the structured naming format: facility_instrument_YYYYMMDD_uuidlast_samplename (see directory_structure.root_naming). This format balances human readability with machine parseability. The full UUID is stored in experiment_info.json metadata, while the directory name includes a UUID fragment for uniqueness.",
+      "gap_handling": "When units or products must be removed, prefer leaving gaps (unit_1, unit_3) over renumbering. Optionally use status field to document why.",
+      "human_identifiers": "Use optional 'name' field to provide memorable identifiers alongside required numeric IDs (unit_1, unit_2, ...)",
+      "tool_display": "Analysis tools should display experiment_name and optional name fields prominently, falling back to numeric IDs only when names are not provided.",
+      "examples": {
+        "good_practice": "Directory: als_bl8_3_1_20250315_446655440000_lysozyme/ → Unit: unit_1 with name='crystal_A3' → Display: 'Crystal A3 from Lysozyme experiment (ALS BL8.3.1, 2025-03-15)'",
+        "poor_practice": "Directory: 550e8400-e29b-41d4-a716-446655440000/ → Unit: unit_1 → Display: 'unit_1 from 550e8400-e29b-41d4-a716-446655440000'"
+      }
+    },
+    "external_data_references": {
+      "purpose": "Support re-analysis experiments that reference existing raw data without duplication",
+      "use_cases": [
+        "Re-processing with improved algorithms or parameters",
+        "Subsetting data for focused analysis or method validation",
+        "Multi-facility campaigns where one facility processes another's raw data",
+        "Long-term archives where recent analyses reference historical data"
+      ],
+      "implementation_strategies": {
+        "symlinks": "Create symlink from unit_N/ to source experiment location. Portable within facility but breaks across network boundaries.",
+        "empty_placeholder": "Leave unit_N/ empty or with single reference file. Requires runtime path resolution in analysis tools.",
+        "data_catalog": "Register external references in separate data catalog/registry. Analysis tools query catalog for actual data location.",
+        "cached_subset": "Copy subset of files locally for analysis while maintaining external_data_reference for provenance tracking."
+      },
+      "tool_requirements": {
+        "analysis_pipelines": "Analysis tools must handle external_data_reference by: (1) Detecting presence of external_data_reference field, (2) Resolving source data location (via symlink, path, or catalog lookup), (3) Verifying read access to source data, (4) Falling back gracefully if source unavailable",
+        "validators": "Validators must NOT fail datasets with external_data_reference + empty directories. Trust-based validation accepts references without verification in 0.2.x",
+        "data_catalogs": "Federation data catalogs should index both local and referenced data, maintaining provenance graphs across experiments"
+      },
+      "provenance_tracking": "External references preserve full provenance: Experiment B (new analysis) → references → Experiment A (original data) → workflow.json documents processing. This creates an auditable chain without data duplication."
+    },
+    "external_data_reference_examples": {
+      "example_1_reanalysis": {
+        "description": "Re-analysis experiment referencing original data with new processing",
+        "original_experiment": {
+          "experiment_id": "550e8400-e29b-41d4-a716-446655440000",
+          "experiment_name": "Lysozyme cryo-ET March 2025",
+          "directory": "als_bl8_3_1_20250315_446655440000_lysozyme/",
+          "raw_data_size": "500 GB",
+          "has_units": ["unit_1", "unit_2", "unit_3"]
+        },
+        "reanalysis_experiment": {
+          "experiment_id": "abc12345-6789-abcd-ef01-234567890abc",
+          "experiment_name": "Lysozyme re-analysis with improved denoising",
+          "directory": "als_bl8_3_1_20251201_234567890abc_lysozyme/",
+          "experiment_info_snippet": {
+            "experiment_id": "abc12345-6789-abcd-ef01-234567890abc",
+            "related_experiments": ["550e8400-e29b-41d4-a716-446655440000"]
+          },
+          "raw_data_info_snippet": {
+            "units": [
+              {
+                "id": "unit_1",
+                "path": "./unit_1/",
+                "description": "Tilt series from grid position A3 (referenced from original experiment)",
+                "external_data_reference": {
+                  "source_experiment_id": "550e8400-e29b-41d4-a716-446655440000",
+                  "source_unit_id": "unit_1",
+                  "note": "Using original high-quality data for denoising algorithm comparison"
+                }
+              }
+            ]
+          },
+          "directory_contents": "unit_1/ is empty (or contains symlink to /data/lambda/experiments/550e8400.../raw_data/unit_1/)"
+        }
+      },
+      "example_2_subset": {
+        "description": "Using subset of units from multi-unit experiment",
+        "scenario": "Original experiment has 20 units, re-analysis focuses on 3 best-quality units",
+        "raw_data_info_snippet": {
+          "units": [
+            {
+              "id": "unit_1",
+              "path": "./unit_1/",
+              "description": "High-quality tilt series - subset for method validation",
+              "name": "grid_A3_highquality",
+              "external_data_reference": {
+                "source_experiment_id": "550e8400-e29b-41d4-a716-446655440000",
+                "source_unit_id": "unit_5",
+                "note": "Selected as highest-quality unit from 20-unit dataset for validation study"
+              }
+            }
+          ]
+        }
+      },
+      "example_3_with_cached_data": {
+        "description": "External reference with locally cached subset",
+        "scenario": "Reference external data but cache subset locally for performance",
+        "raw_data_info_snippet": {
+          "units": [
+            {
+              "id": "unit_1",
+              "path": "./unit_1/",
+              "description": "Subset of tilt series cached locally (angles -40 to +40 only)",
+              "external_data_reference": {
+                "source_experiment_id": "550e8400-e29b-41d4-a716-446655440000",
+                "source_unit_id": "unit_1",
+                "source_facility_path": "/gpfs/als/2025/03/lysozyme/raw_data/unit_1/",
+                "note": "Full dataset at source, local cache contains subset for performance"
+              },
+              "files": [
+                {
+                  "filename": "tilt_-040_to_+040.mrc",
+                  "description": "Cached subset of tilt series",
+                  "sha256": "abc123...",
+                  "file_size": 50000000,
+                  "mime_type": "application/octet-stream"
+                }
+              ]
+            }
+          ]
+        },
+        "notes": "Directory contains actual files (cached subset) but external_data_reference documents the complete source"
+      }
+    },
+    "serial_file_pattern_examples": {
+      "example_1_rotation_crystallography": {
+        "scenario": "Rotation series with 360 frames, 1° oscillation, HDF5 format",
+        "without_file_groups": {
+          "description": "Would require 360 individual file entries",
+          "manifest_size": "~50 KB for file array alone"
+        },
+        "with_file_groups": {
+          "files": [
+            {
+              "file_group": "serial",
+              "pattern": "rotation_####.h5",
+              "range": "0001-0360",
+              "description": "Rotation series diffraction images, 1° oscillation per frame, 0-359°",
+              "type": "hdf5",
+              "mime_type": "application/x-hdf",
+              "typical_file_size": 5242880,
+              "total_size": 1887436800,
+              "checksum_file": "checksums.sha256"
+            }
+          ],
+          "manifest_size": "~1 KB",
+          "reduction": "50x smaller"
+        }
+      },
+      "example_2_tilt_series_with_gaps": {
+        "scenario": "Electron microscopy tilt series, frames 1-34 and 37-100 (frames 35-36 failed/deleted)",
+        "files": [
+          {
+            "file_group": "serial",
+            "pattern": "tilt_series_###.mrc",
+            "range": "001-034,037-100",
+            "description": "Tilt series from -60° to +60°, frames 35-36 excluded due to beam instability",
+            "type": "mrc",
+            "mime_type": "application/octet-stream",
+            "typical_file_size": 10485760,
+            "total_size": 1019215872,
+            "checksum_file": "tilt_checksums.txt"
+          }
+        ],
+        "expands_to": [
+          "tilt_series_001.mrc through tilt_series_034.mrc (34 files)",
+          "tilt_series_037.mrc through tilt_series_100.mrc (64 files)",
+          "Total: 98 files"
+        ]
+      },
+      "example_3_mixed_individual_and_groups": {
+        "scenario": "Unit with metadata file and serial image data",
+        "files": [
+          {
+            "filename": "acquisition_metadata.json",
+            "description": "Detailed acquisition parameters and timestamps",
+            "sha256": "a1b2c3d4e5f6789012345678901234567890abcdef1234567890abcdef123456",
+            "file_size": 8192,
+            "mime_type": "application/json"
+          },
+          {
+            "filename": "rotation_master.h5",
+            "description": "HDF5 master file with links to data files",
+            "sha256": "1a2b3c4d5e6f789012345678901234567890abcdef1234567890abcdef123456",
+            "file_size": 2048576,
+            "mime_type": "application/x-hdf"
+          },
+          {
+            "file_group": "serial",
+            "pattern": "rotation_data_######.h5",
+            "range": "000001-000036",
+            "description": "HDF5 data files, 100 frames per file, 3600 frames total",
+            "type": "hdf5",
+            "mime_type": "application/x-hdf",
+            "typical_file_size": 524288000,
+            "total_size": 18874368000,
+            "checksum_file": "data_checksums.sha256"
+          }
+        ]
+      },
+      "example_4_checksum_file_format": {
+        "scenario": "Contents of checksums.sha256 file for rotation series",
+        "checksum_file_contents": [
+          "a1b2c3d4e5f67890123456789012345678901234567890123456789012345678 rotation_0001.h5",
+          "b2c3d4e5f67890123456789012345678901234567890123456789012345678 rotation_0002.h5",
+          "c3d4e5f67890123456789012345678901234567890123456789012345678 rotation_0003.h5",
+          "[... lines 4 through 359 omitted for brevity ...]",
+          "f9e8d7c6b5a43210fedcba9876543210fedcba9876543210fedcba9876543210 rotation_0360.h5"
+        ],
+        "note": "Complete file contains 360 lines, one per rotation frame. Each line: 64 lowercase hexadecimal character SHA256 checksum, single space, filename. This is standard SHA256SUMS format.",
+        "format": "Standard SHA256SUMS format: one line per file, checksum (64 hex chars) followed by space and filename",
+        "validation": "Validators can read this file to verify checksums for individual files in the group"
+      }
+    },
+    "migrating_to_file_groups": {
+      "description": "How to convert existing individual file entries to file groups",
+      "when_to_migrate": [
+        "Experiment has 10+ sequential files per unit",
+        "Files follow consistent naming pattern with serial numbers",
+        "Manifest size is becoming problematic (>100 KB)"
+      ],
+      "migration_steps": [
+        "1. Identify sequential file sequences in existing manifest",
+        "2. Determine pattern: extract common prefix, suffix, padding width",
+        "3. Determine range: identify start/end numbers, detect gaps",
+        "4. Calculate total_size: sum of all individual file_size values",
+        "5. Calculate typical_file_size: median or mean of file sizes",
+        "6. Optional: Generate checksum file from individual checksums",
+        "7. Replace individual entries with single file group entry",
+        "8. Validate: expand file group and verify matches original list"
+      ],
+      "backward_compatibility": {
+        "description": "File groups are optional - existing manifests with individual entries remain valid",
+        "old_validators": "Validators prior to file group support will reject manifests containing file_group entries (unknown field)",
+        "new_validators": "Validators with file group support accept both individual entries and file groups"
+      }
+    }
+  },
+
+  "known_limitations_and_edge_cases": {
+    "description": "Documented limitations, edge cases, and unresolved design questions in contract_version 0.2.x",
+    
+    "external_data_references": {
+      "limitation_1_trust_based_validation": {
+        "description": "Validators cannot verify that referenced experiments exist or are accessible",
+        "impact": "A unit may reference source_experiment_id that: (1) doesn't exist, (2) exists but is not LAMBDA-compliant, (3) exists but source_unit_id is missing or invalid, (4) has been deleted or moved since reference was created",
+        "mitigation": "Validators reject datasets where source_experiment_id is not in related_experiments (enforced linkage). Analysis tools should fail gracefully if referenced data is unavailable at runtime.",
+        "resolution": "Contract version 0.3.0+ may introduce federation API for verification"
+      },
+      "limitation_2_stale_references": {
+        "description": "Referenced source experiment may be modified or deleted after reference is created",
+        "impact": "External data references can become stale. Re-analysis experiment may reference data that has been updated, moved, or deleted without the reference experiment being aware.",
+        "mitigation": "Use immutable source experiments where possible. Document data retention policies. Consider copying critical subsets rather than pure references for long-term preservation.",
+        "resolution": "Future versions may support versioned references or immutability markers"
+      },
+      "limitation_3_circular_references": {
+        "description": "Contract does not prevent circular reference chains: Experiment A → references → Experiment B → references → Experiment A",
+        "impact": "Analysis tools traversing provenance chains could enter infinite loops",
+        "mitigation": "Analysis tools must implement cycle detection when traversing external_data_reference chains. Validators in 0.2.x do not detect or prevent circular references.",
+        "resolution": "Future validators may detect circular references across related_experiments graph"
+      },
+      "limitation_4_cross_facility_references": {
+        "description": "External references assume shared filesystem or network access to source data",
+        "impact": "References across facilities require coordination: shared storage, data transfer, or federation infrastructure. A facility may not have access to another facility's data even with valid reference.",
+        "mitigation": "Document data access policies in related_experiments. Consider data transfer or replication for cross-facility references. Use source_facility_path for documentation.",
+        "resolution": "Future LAMBDA federation layer may provide standard data access mechanisms"
+      }
+    },
+    
+    "status_field_edge_cases": {
+      "edge_case_1_external_ref_plus_deleted": {
+        "description": "A unit can have both external_data_reference AND status='deleted'",
+        "semantics": "This combination indicates: 'This unit referenced external data, but the reference itself is now deprecated/deleted (perhaps source was removed)'",
+        "validation": "Currently permitted. Validators do not reject this combination.",
+        "guidance": "If source experiment is deleted, consider marking referencing units as status='invalid' or 'deleted' to indicate broken reference"
+      },
+      "edge_case_2_active_but_source_gone": {
+        "description": "Unit with external_data_reference and status='active' (or omitted) but source experiment has been deleted",
+        "semantics": "Reference is marked as usable but source data is unavailable",
+        "validation": "Validators in 0.2.x cannot detect this condition (trust-based model)",
+        "impact": "Analysis tools will fail at runtime when attempting to access data",
+        "guidance": "Analysis pipelines should validate data access before processing and fail gracefully with clear error messages about missing source data"
+      }
+    },
+    
+    "sequential_numbering_edge_cases": {
+      "edge_case_1_gaps_and_new_additions": {
+        "description": "After creating gaps (e.g., unit_1, unit_3, unit_5), where should new units be added?",
+        "guidance": "New units should be added at the next sequential number: unit_6. Do NOT reuse gap numbers (unit_2, unit_4) as this could conflict with historical references or cached indices.",
+        "rationale": "Monotonically increasing IDs prevent confusion and ensure new units are clearly distinguishable from removed ones"
+      },
+      "edge_case_2_starting_above_1": {
+        "description": "Can a dataset start with unit_5 instead of unit_1?",
+        "validation": "No. Validators require IDs start from 1. unit_5 as first unit is a validation failure.",
+        "rationale": "Consistent starting point simplifies tooling and prevents ambiguity about whether earlier units were deleted or never existed"
+      }
+    },
+    
+    "uuid_collision_edge_case": {
+      "description": "Although UUID collisions are negligibly probable (2^-122 for UUID v4), they are theoretically possible",
+      "impact": "Two experiments could generate identical experiment_id values",
+      "validation": "No central registry exists to detect collisions in 0.2.x",
+      "mitigation": "Use cryptographic-quality random number generators (not timestamp-based). UUID collision probability is ~1 in 10^36 for reasonable dataset sizes (<10^18 UUIDs).",
+      "resolution": "Future federation infrastructure may provide optional centralized UUID registry for collision detection"
+    },
+    
+    "mime_type_validation": {
+      "description": "mime_type field accepts any string; no validation against IANA media types registry",
+      "impact": "Typos or invalid MIME types (e.g., 'mrc/file' instead of 'application/octet-stream') are not caught",
+      "validation": "Validators accept any non-empty string as mime_type",
+      "mitigation": "Use standard MIME types where possible. Consult IANA media types registry: https://www.iana.org/assignments/media-types/",
+      "resolution": "Future versions may validate against IANA registry or facility-specific whitelist"
+    }
+  },
+
+  "validator_directive": {
+    "purpose": "Strict validator for LAMBDA Data Organization Contract",
+    "input": "Experiment directory path and its JSON manifests",
+    "output": "Either { status: 'ok' } or array of error objects",
+    "error_format": {
+      "rule": "specific rule name from validation_rules",
+      "path": "filesystem path to offending file/directory (relative to experiment root)",
+      "json_pointer": "JSON Pointer to offending field in manifest (if applicable)",
+      "expected": "concise description of what the rule requires",
+      "actual": "the value or condition observed"
+    },
+    "steps": [
+      "1. Validate directory structure: enforce validation_rules.root_directory exactly, including: (a) root directory name follows structured format (facility_instrument_YYYYMMDD_uuidlast_samplename) and is consistent with experiment_info fields, (b) exactly four items in root (experiment_info.json + three directories), (c) hidden-files rejection, (d) symlink containment",
+      "2. Validate each JSON file against its JSON Schema definition under schemas and global validation_rules. JSON Schema validity is necessary but not sufficient",
+      "3. Enforce all cross-cutting rules in validation_rules even when not expressible as JSON Schema: UUID syntax, ORCID format, path normalization and safety, sequential numbering WITH GAPS PERMITTED, timestamp constraints, content.components (sequences/SMILES validation), zero-byte files, checksums, provenance, reproducibility, extensions, forbidden content, version coupling, self-reference prevention (related_experiments), cross-reference validation (input_uuids), status field validation (directory existence for active items is fatal), name field validation, EXTERNAL DATA REFERENCES (source_experiment_id MUST be in related_experiments, allow empty directories when external_data_reference present), SERIAL FILE GROUPS (pattern format, range format, padding consistency, range ordering, file existence sampling, checksum file validation if provided)",
+      "3b. For file groups (file_group='serial'): (1) Validate pattern format (contains #'s, has extension), (2) Validate range format and ordering, (3) Verify padding consistency (# count matches digit count in range), (4) Expand pattern+range to verify at least first, middle, last files exist, (5) If checksum_file present, validate format and sample checksums",
+      "4. When a rule is violated, stop considering that dataset valid. Output error object for each violation",
+      "5. If and only if all rules pass, output { status: 'ok' }"
+    ],
+    "severity": "All violations are fatal; no warnings permitted"
+  }
+}

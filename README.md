@@ -6,7 +6,7 @@ LAMBDA is a federated data architecture for discovering and accessing bioimaging
 
 ## Quick Links
 
-- 📄 [**Data Organization Contract v0.1.0**](contract_v0.1.0.json) - Structure and metadata requirements
+- 📄 [**Data Organization Contract v0.2.0**](contract_v0.2.0.json) - Structure and metadata requirements
 - 🔍 [**Facility Search API v0.1.0**](facility_search_api_v0.1.0.md) - Discovery interface specification
 - 📖 [**Strategic Vision**](#strategic-vision) - Why LAMBDA and what it achieves
 
@@ -39,7 +39,7 @@ Rather than mandating infrastructure changes, LAMBDA defines:
 
 ## The Three Specifications
 
-### 1. Data Organization Contract ([contract_v0.1.0.json](contract_v0.1.0.json))
+### 1. Data Organization Contract ([contract_v0.2.0.json](contract_v0.2.0.json))
 
 Defines the structure of a LAMBDA-compliant experiment package:
 
@@ -141,7 +141,7 @@ TDB
 ```
 lambda-specs/
 ├── README.md                           # This file
-├── contract_v0.1.0.json               # Data organization contract
+├── contract_v0.2.0.json               # Data organization contract
 ├── facility_search_api_v0.1.0.md      # Search API specification
 ├── examples/                           # Example conformant datasets
 │   ├── cryo-et-example/
