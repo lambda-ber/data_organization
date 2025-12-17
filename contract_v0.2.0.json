@@ -200,26 +200,31 @@
           "type": "object",
           "description": "Research team information",
           "additionalProperties": false,
-          "required": ["PI"],
+          "required": ["PIs"],
           "properties": {
-            "PI": {
-              "type": "object",
-              "additionalProperties": false,
-              "required": ["name", "institute", "orcid"],
-              "properties": {
-                "name": {
-                  "type": "string",
-                  "description": "Principal investigator name"
-                },
-                "institute": {
-                  "type": "string",
-                  "description": "Principal investigator institution"
-                },
-                "orcid": {
-                  "type": "string",
-                  "description": "ORCID identifier for principal investigator",
-                  "pattern": "^[0-9]{4}-[0-9]{4}-[0-9]{4}-[0-9]{3}[0-9X]$",
-                  "examples": ["0000-0002-1825-0097"]
+            "PIs": {
+              "type": "array",
+              "description": "Principal investigators (one or more)",
+              "minItems": 1,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["name", "institute", "orcid"],
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "description": "Principal investigator name"
+                  },
+                  "institute": {
+                    "type": "string",
+                    "description": "Principal investigator institution"
+                  },
+                  "orcid": {
+                    "type": "string",
+                    "description": "ORCID identifier for principal investigator",
+                    "pattern": "^[0-9]{4}-[0-9]{4}-[0-9]{4}-[0-9]{3}[0-9X]$",
+                    "examples": ["0000-0002-1825-0097"]
+                  }
                 }
               }
             },
@@ -1008,7 +1013,7 @@
       "self_reference_prevention": "related_experiments must not contain experiment_id. Requires programmatic validation (not expressible in JSON Schema)."
     },
     "orcid": {
-      "PI_required": true,
+      "PIs_required": true,
       "team_members_optional": true,
       "validation": "If provided, must satisfy ORCID checksum rules. JSON Schema pattern validates format (16 digits in 4-4-4-4 pattern with checksum character), but validators MUST perform ORCID checksum validation programmatically. ORCID uses ISO 7064 Mod 11,10 checksum algorithm. Pattern validation is necessary but not sufficient - external checksum validation required.",
       "checksum_validation": "Validators must implement ORCID checksum algorithm (ISO 7064 Mod 11,10) or use a validated ORCID library. Pattern matching alone is insufficient."
